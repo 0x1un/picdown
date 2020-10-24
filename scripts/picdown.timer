@@ -1,0 +1,7 @@
+[Unit]
+Description=网络巡检抓图定时任务
+
+[Timer]
+OnBootSec=2h
+OnUnitActiveSec=2h
+Unit=picdown.service
