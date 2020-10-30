@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	action "picdown/actions"
 	"strings"
@@ -22,7 +22,15 @@ var (
 	cfg = ReadConfigFile("conf/conf.ini")
 )
 
-func init() { cfg.Init() }
+func init() {
+	cfg.Init()
+	file, err := os.OpenFile(cfg.Default["LogFile"], os.O_APPEND|os.O_CREATE, os.ModeAppend)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	logrus.SetOutput(io.MultiWriter(os.Stdout, file))
+	logrus.SetReportCaller(true)
+}
 
 type ChromeDPCtx struct {
 	ctx    context.Context
@@ -53,17 +61,19 @@ func downloadSangForPics() []string {
 	chromeDP := NewChromeDPContext()
 	defer chromeDP.cancel()
 	picName := make([]string, 0)
-	var buf []byte
 	for _, profile := range cfg.Another {
+		var buf []byte // 保证每次循环完成后都为空
 		sfAcn := action.SangForLogin("https://"+profile["SangForURI"], profile["SangForUser"], profile["SangForPass"], 5, 15)
 		if err := chromedp.Run(chromeDP.ctx, fullScreenshot(100, sfAcn, &buf)); err != nil {
-			log.Fatal(err)
+			logrus.Errorln(err)
 		}
 		target := cfg.Output + profile["SangForURI"] + ".png"
 		// picName: picture path
-		picName = append(picName, target)
-		if err := ioutil.WriteFile(target, buf, 0644); err != nil {
-			log.Fatal(err)
+		if len(buf) != 0 {
+			picName = append(picName, target)
+			if err := ioutil.WriteFile(target, buf, 0644); err != nil {
+				logrus.Errorln(err)
+			}
 		}
 	}
 	return picName
@@ -133,12 +143,12 @@ func call() {
 	pics := downloadSangForPics()
 	err := downloadZBXPicAndMerge("conf/zbx.ini", "zbx_merged.png")
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("download pictures failure: %s\n", err.Error())
 	}
 
 	target := "sf_merged.png"
 	if err := MergePIC(pics, 2, 1, target); err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("merge the pictures failure: %s\n", err.Error())
 	}
 
 	strBuf := strings.Builder{}
@@ -151,19 +161,19 @@ func call() {
 	}
 	mergeRGBA, err := gim.New(grids, 1, 2).Merge()
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("Error encountered while merging pictures: %s\n", err.Error())
 	}
 	resTarget := cfg.Default["Output"] + "result.png"
 	fHandler, err := os.Create(resTarget)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("failed to create result.png: %s\n", err.Error())
 	}
 	if err := png.Encode(fHandler, mergeRGBA); err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("failed to save merged pictures: %s", err.Error())
 	}
 	resName, err := PostFileToStorage(resTarget)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("uploading pic to QiNiu failure: %s\n", err.Error())
 	}
 	if resName != "" {
 		url := cfg.Default["QiNiuURL"] + resName
