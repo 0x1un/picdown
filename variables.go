@@ -2,10 +2,11 @@ package main
 
 import (
 	"errors"
-	"github.com/go-ini/ini"
-	"github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
+
+	"github.com/go-ini/ini"
+	"github.com/sirupsen/logrus"
 )
 
 var (
